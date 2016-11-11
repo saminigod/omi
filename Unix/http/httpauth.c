@@ -747,7 +747,7 @@ MI_Boolean Http_EncryptData(_In_ Http_SR_SocketData * handler, _Out_ char **pHea
     *pHeaderLen = pdst - pNewHeader;
     *pHeader = pNewHeader;
 
-    Page *pNewData = PAL_Malloc(needed_data_size+sizeof(Page));
+    Page *pNewData = PAL_Malloc(needed_data_size+sizeof(Page)+256);
     if (!pNewData)
     {
         (*_g_gssState.Gss_Release_Buffer)(&min_stat, &output_buffer);
@@ -1537,6 +1537,24 @@ MI_Boolean IsClientAuthorized(_In_ Http_SR_SocketData * handler)
 
                 goto Done;
             }
+
+            if (output_token.length != 0 && headers->contentLength == 0 )
+            {
+                handler->httpErrorCode = HTTP_ERROR_CODE_OK;
+                auth_response = _BuildAuthResponse(protocol_p, handler->httpErrorCode, &output_token, &response_len);
+                if (auth_response == NULL)
+                {
+
+                    // Problem : 2do complain into trace file
+                    handler->httpErrorCode = HTTP_ERROR_CODE_INTERNAL_SERVER_ERROR;
+                }
+                (*_g_gssState.Gss_Release_Buffer)(&min_stat, &output_token);
+
+                _SendAuthResponse(handler, auth_response, response_len);
+                PAL_Free(auth_response);
+            }
+
+            // If there is no content, its up to us to send the mutual auth reply
 
             (* _g_gssState.Gss_Release_Buffer)(&min_stat, user_name);
             handler->negFlags = flags;
