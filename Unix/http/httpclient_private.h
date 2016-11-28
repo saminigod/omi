@@ -79,6 +79,7 @@ typedef struct _HttpClient_SR_SocketData {
 
     AuthMethod authType;
     char *username;
+    char *user_domain;
     char *password;
     MI_Uint32 passwordLen;
 
@@ -91,6 +92,7 @@ typedef struct _HttpClient_SR_SocketData {
 
     /* Destination info. We use this in the authorisation transaction */
 
+    char *hostname;             // host name (name or ip addr)
     Addr hostAddr;              // host address (resolved)
     MI_Uint32 port;             // port
     MI_Boolean secure;          // This is an SSL connection (https)

@@ -1580,6 +1580,7 @@ MI_Boolean IsClientAuthorized(_In_ Http_SR_SocketData * handler)
                 auth_response = (unsigned char *)RESPONSE_HEADER_UNAUTH_FMT;
                 response_len = strlen(RESPONSE_HEADER_UNAUTH_FMT);
 
+                // Problem : 2do complain
                 handler->authFailed = TRUE;
 
             }

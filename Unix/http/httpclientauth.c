@@ -210,7 +210,7 @@ typedef struct _Gss_Extensions
 static Gss_Extensions _g_gssClientState = { 0 };
 static struct _Once    g_once_state = ONCE_INITIALIZER;
 
-
+static const char GSS_LIBRARY_NAME[] = CONFIG_GSSLIB;
 
 static void
 _GssUnloadLibrary()
@@ -226,6 +226,13 @@ _GssUnloadLibrary()
 static _Success_(return == 0) int _GssClientInitLibrary( _In_ void* data, _Outptr_result_maybenull_ void** value)
 
 {
+#if defined(macos)
+    static const char *GSS_NT_USER_NAME_REF    = "__gss_c_nt_user_name_oid_desc";
+    static const char *GSS_NT_SERVICE_NAME_REF = "__gss_c_nt_hostbased_service_oid_desc";
+#else
+    static const char *GSS_NT_USER_NAME_REF    = "gss_nt_user_name";
+    static const char *GSS_NT_SERVICE_NAME_REF = "gss_nt_service_name_v2";
+#endif
 
    // Reserve the state to prevent race conditions
 
@@ -235,7 +242,7 @@ static _Success_(return == 0) int _GssClientInitLibrary( _In_ void* data, _Outpt
    }
    _g_gssClientState.gssLibLoaded = LOADING;
 
-   void *libhandle = dlopen(CONFIG_GSSLIB, RTLD_NOW | RTLD_GLOBAL);
+   void *libhandle = dlopen(GSS_LIBRARY_NAME, RTLD_NOW | RTLD_GLOBAL);
    void *fn_handle = NULL;
 
    trace_HTTP_LoadingGssApi(CONFIG_GSSLIB);
@@ -365,27 +372,36 @@ static _Success_(return == 0) int _GssClientInitLibrary( _In_ void* data, _Outpt
         }
         _g_gssClientState.Gss_Wrap   = (Gss_Wrap_Func) fn_handle;
 
-       fn_handle = dlsym(libhandle, "gss_nt_service_name");
-       if (!fn_handle)
-       {
-           trace_HTTP_GssFunctionNotPresent("gss_nt_service_name");
-           goto failed;
-       }
-       _g_gssClientState.Gss_Nt_Service_Name  = *(gss_OID*)fn_handle;
+        fn_handle = dlsym(libhandle, GSS_NT_SERVICE_NAME_REF);
+        if (!fn_handle)
+        {
+            trace_HTTP_GssFunctionNotPresent(GSS_NT_SERVICE_NAME_REF);
+            goto failed;
+        }
+#if defined(macos)
+        _g_gssClientState.Gss_Nt_Service_Name  = (gss_OID)fn_handle;
+#else
+        _g_gssClientState.Gss_Nt_Service_Name  = *(gss_OID*)fn_handle;
+#endif
 
-       fn_handle = dlsym(libhandle, "gss_nt_user_name");
-       if (!fn_handle)
-       {
-           trace_HTTP_GssFunctionNotPresent("gss_nt_user_name");
-           goto failed;
-       }
+        fn_handle = dlsym(libhandle, GSS_NT_USER_NAME_REF);
+        if (!fn_handle)
+        {
+            trace_HTTP_GssFunctionNotPresent(GSS_NT_USER_NAME_REF);
+            goto failed;
+        }
+
+#if defined(macos)
+       _g_gssClientState.Gss_C_Nt_User_Name  = (gss_OID)fn_handle;
+#else
        _g_gssClientState.Gss_C_Nt_User_Name  = *(gss_OID*)fn_handle;
+#endif
 
-       _g_gssClientState.libHandle    = libhandle;
-       _g_gssClientState.gssLibLoaded = LOADED;
-       PAL_Atexit(_GssUnloadLibrary);
+        _g_gssClientState.libHandle    = libhandle;
+        _g_gssClientState.gssLibLoaded = LOADED;
+        PAL_Atexit(_GssUnloadLibrary);
       
-       return TRUE;
+        return TRUE;
    }
 
    failed:
@@ -1342,9 +1358,9 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
     char *rslt = NULL;
 
     static const gss_OID_desc mech_krb5 = { 9, "\052\206\110\206\367\022\001\002\002" };
-    static const gss_OID_desc mech_spnego = { 6, "\053\006\001\005\005\002" };
+    // static const gss_OID_desc mech_spnego = { 6, "\053\006\001\005\005\002" };
     static const gss_OID_desc mech_iakerb = { 6, "\053\006\001\005\002\005" };
-    static const gss_OID_set_desc mechset_spnego = { 1, (gss_OID) & mech_spnego };
+    //static const gss_OID_set_desc mechset_spnego = { 1, (gss_OID) & mech_spnego };
 
     static const gss_OID mechset_krb5_elems[] = { (gss_OID const)&mech_krb5,
         (gss_OID const)&mech_iakerb
@@ -1358,13 +1374,14 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
     // gss_OID_set_desc mechset_krb5 = { 1, &mech_krb5 };
     // gss_OID_set_desc mechset_iakerb = { 1, &mech_iakerb };
     static const gss_OID_desc mechset_avail_elems[] = {
+        { 6, "\053\006\001\005\005\002" },
         { 10, "\x2b\x06\x01\x04\x01\x82\x37\x02\x02\x0a" }, // For now we start with ntlm
-        // mech_krb5,   Not yet
-        // mech_iakerb,  Not yet
+        { 9, "\052\206\110\206\367\022\001\002\002" }, // mech_krb5 (not yet)
+        { 6, "\053\006\001\005\002\005" } // mech_iakerb,  Not yet
     };
-    const gss_OID_set_desc mechset_avail = { /*3, */ 1, (gss_OID) mechset_avail_elems };
+    const gss_OID_set_desc mechset_avail = { 2, /* 4, not yet */ (gss_OID) mechset_avail_elems };
 
-    static const char WSMAN_PROTOCOL[] = "WSMAN/";
+    static const char WSMAN_PROTOCOL[] = "WSMAN@";
 
    
     OM_uint32 maj_stat, min_stat;
@@ -1405,7 +1422,8 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
     {
     case AUTH_METHOD_NEGOTIATE_WITH_CREDS:
     case AUTH_METHOD_NEGOTIATE:
-        mechset = (gss_OID_set) & mechset_spnego;
+        //mechset = (gss_OID_set) & mechset_spnego;
+        mechset = (gss_OID_set) & mechset_avail;
         break;
 
     case AUTH_METHOD_KERBEROS:
@@ -1422,9 +1440,20 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
     if (self->username != NULL)
     {
         gss_buffer_desc buf;
+        char buffer[1024];
+        char *bufp = &buffer[0];
 
-        buf.value = self->username;
-        buf.length = Strlen(self->username);
+        strcpy(bufp, self->username);
+        bufp += strlen(self->username);
+
+        if (self->user_domain)
+        {
+            *bufp++ = '@';
+            strcpy(bufp, self->user_domain);
+            bufp += strlen(self->user_domain);
+        }
+        buf.value = buffer;
+        buf.length = bufp-buffer;
 
         maj_stat = (*_g_gssClientState.Gss_Import_Name)(&min_stat, &buf, _g_gssClientState.Gss_C_Nt_User_Name, &gss_username);
 
@@ -1438,7 +1467,20 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
 
             if (!_g_gssClientState.gssAcquireCredwithPassword )
             {
-                trace_HTTP_GssFunctionNotPresent("gss_acquire_creD_with_password");
+                /* If we don't have acquire cred with password, we need to acquire without */
+
+                if (gss_username != GSS_C_NO_NAME)
+                {
+                    maj_stat = (*_g_gssClientState.Gss_Acquire_Cred)(&min_stat, gss_username, 0,
+                                            mechset, GSS_C_INITIATE, &cred, NULL, NULL);
+                    if (maj_stat != GSS_S_COMPLETE)
+                    {
+                        _ReportError(self,
+                                 "acquiring creds with username only failed", maj_stat, min_stat);
+                        (*_g_gssClientState.Gss_Release_Name)(&min_stat, &gss_username);
+                        return NULL;
+                    }
+                }
             }
             else
             {
@@ -1516,38 +1558,46 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
         struct addrinfo hints, *info;
         int gai_result;
 
-        char hostname[1024];
-        hostname[1023] = '\0';
-
-        gethostname(hostname, 1023);
+        char thostname[1024];
 
         memset(&hints, 0, sizeof hints);
         hints.ai_family = AF_UNSPEC;    /*either IPV4 or IPV6 */
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_flags = AI_CANONNAME;
 
-        if ((gai_result = getaddrinfo(hostname, "http", &hints, &info)) != 0)
+        if ((gai_result = getaddrinfo(self->hostname, "http", &hints, &info)) != 0)
         {
             trace_HTTP_GetAddrInfoError(gai_strerror(gai_result));
             return NULL;
         }
 
-        /*
-           for(p = info; p != NULL; p = p->ai_next)
+        char *tname = (info->ai_canonname)? info->ai_canonname : "host";
+        if (!info->ai_canonname)
            {
-           printf("hostname: %s\n", p->ai_canonname);
-           }
-         */
+            // If there is no canonic name the address is almost certainly an ip addr. Lets look up the 
+            // hostname.
 
-        buff.length = protocol_len + strlen(info->ai_canonname);
+            int ret = getnameinfo(info->ai_addr, info->ai_addrlen,
+                            thostname, 1024, NULL, 0, 0);
+            if (ret)
+            {
+                //complain
+           }
+            else
+            {
+                tname = thostname;
+            }        
+        }        
+
+tname = self->hostname;
+
+        buff.length = protocol_len + strlen(tname);
         buff.value = PAL_Malloc(buff.length + 1);
         memcpy(buff.value, protocol, protocol_len);
-        memcpy(((MI_Char *) buff.value) + protocol_len,
-               info->ai_canonname, strlen(info->ai_canonname));
+        memcpy(((MI_Char *) buff.value) + protocol_len, tname, strlen(tname));
 
         ((MI_Char *) buff.value)[buff.length] = 0; 
 
-        // 2DO: If we dont have an fdqn we will use the addr
 
         freeaddrinfo(info);
 
@@ -1596,6 +1646,10 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
     }
     else {
         // Unexpected here
+        _ReportError(self, "gss_init_sec_context", maj_stat, min_stat);
+        (*_g_gssClientState.Gss_Release_Name)(&min_stat, &gss_username);
+        (*_g_gssClientState.Gss_Release_Cred)(&min_stat, &cred);
+        return NULL;
     }
 
     (*_g_gssClientState.Gss_Release_Name)(&min_stat, &gss_username);

@@ -2453,8 +2453,9 @@ MI_Result HttpClient_New_Connector2(
     const MI_Char *transport = MI_T("HTTPS");
 
     AuthMethod authtype =  AUTH_METHOD_BYPASS;
-    char *username = NULL;
-    char *password = NULL;
+    char *username    = NULL;
+    char *user_domain = NULL;
+    char *password    = NULL;
     MI_Uint32 password_len = 0;
 
     /* allocate this, inits selector */
@@ -2527,6 +2528,35 @@ MI_Result HttpClient_New_Connector2(
         self->connector->encrypting   = FALSE; // The auth will establish this
         self->connector->readyToSend  = FALSE;
         self->connector->negoFlags    = FALSE;
+        self->connector->hostname     = strdup(host);
+
+        // Parse the user name to separate the domain/host from the username. This is either in the form
+        // domain\user or user@domain or just user. mit krb5 can handle either, but heimdal doesn;t.
+
+        user_domain = memchr(username, '\\', strlen(username));
+        if (user_domain)
+        {
+            // The form would be "domain\user'
+            *user_domain = '\0';
+            self->connector->username    = user_domain+1;
+            self->connector->user_domain = username;
+        }
+        else
+        {
+            user_domain = memchr(username, '@', strlen(username));
+            if (user_domain)
+            {
+                *user_domain = '\0';
+                self->connector->username    = username;
+                self->connector->user_domain = user_domain+1;
+            }
+            else
+            {
+                // No credential domain specified
+                self->connector->username    = username;
+                self->connector->user_domain = (char*)host;
+            }
+        }
 
         self->connector->authType = authtype;
         self->connector->username = (char*)username;
@@ -2622,7 +2652,13 @@ MI_Result HttpClient_Delete(
                 PAL_Free(self->connector->password);
                 self->connector->password = NULL;
             }
-        
+
+            if (self->connector->hostname)
+            {
+                PAL_Free(self->connector->hostname);
+                self->connector->hostname = NULL;
+            }
+
             Selector_RemoveHandler(self->selector, &self->connector->base);
         }
     }
