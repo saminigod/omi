@@ -32,16 +32,6 @@
 #define PROTOCOLSOCKET_STRANDAUX_READYTOFINISH  1
 #define PROTOCOLSOCKET_STRANDAUX_CONNECTEVENT 2
 
-#if defined(CONFIG_ENABLE_WCHAR)
-
-/* We do not yet support utf16 encoding in wsman. This variable is used to prevent unreachable code errors
- * caused by just ifdefing out the support, since that would hit in a number of places rendering the code
-  * quite hard to read */
-
-static MI_Boolean WSMAN_UTF16_IMPLEMENTED = FALSE;
-#endif
-
-
 STRAND_DEBUGNAME3( WsmanClientConnector, PostMsg, ReadyToFinish, ConnectEvent )
 
 typedef struct _EnumerationState
@@ -1308,33 +1298,31 @@ MI_Result WsmanClient_New_Connector(
 
     {
         const MI_Char *packetEncoding;
+        if ((MI_DestinationOptions_GetPacketEncoding(options, &packetEncoding) != MI_RESULT_OK) ||
+             (Tcscmp(packetEncoding, MI_DESTINATIONOPTIONS_PACKET_ENCODING_DEFAULT) == 0))
 #if defined(CONFIG_ENABLE_WCHAR)
-        /* If packet encoding is in options then it must be UTF16 until we implement the conversion */
-        if ((MI_DestinationOptions_GetPacketEncoding(options, &packetEncoding) == MI_RESULT_OK) &&
-                (Tcscmp(packetEncoding, MI_DESTINATIONOPTIONS_PACKET_ENCODING_UTF16) != 0))
         {
-            miresult = MI_RESULT_INVALID_PARAMETER;
-            goto finished;
-        }
-        self->contentType = "Content-Type: application/soap+xml;charset=UTF-16";
-
-        if (!WSMAN_UTF16_IMPLEMENTED)
-        {
-            /* We don't yet implement utf-16 BOM. Fail */
-
-            miresult = MI_RESULT_INVALID_PARAMETER;
-            goto finished;/* We cannot add a UTF-16 BOM to the front yet so need to fail */
+            packetEncoding = MI_DESTINATIONOPTIONS_PACKET_ENCODING_UTF16;
         }
 #else
-        /* If packet encoding is in options then it must be UTF8 until we implement the conversion */
-        if ((MI_DestinationOptions_GetPacketEncoding(options, &packetEncoding) == MI_RESULT_OK) &&
-                (Tcscmp(packetEncoding, MI_DESTINATIONOPTIONS_PACKET_ENCODING_UTF8) != 0))
+        {
+            packetEncoding = MI_DESTINATIONOPTIONS_PACKET_ENCODING_UTF8;
+        }
+#endif
+
+        if (Tcscmp(packetEncoding, MI_DESTINATIONOPTIONS_PACKET_ENCODING_UTF16) == 0)
+        {
+            self->contentType = "Content-Type: application/soap+xml;charset=UTF-16";
+        }
+        else if (Tcscmp(packetEncoding, MI_DESTINATIONOPTIONS_PACKET_ENCODING_UTF8) == 0)
+        {
+            self->contentType = "Content-Type: application/soap+xml;charset=UTF-8";
+        }
+        else
         {
             miresult = MI_RESULT_INVALID_PARAMETER;
             goto finished;
         }
-        self->contentType = "Content-Type: application/soap+xml;charset=UTF-8";
-#endif
     }
 
     if (MI_DestinationOptions_GetMaxEnvelopeSize(options, &self->wsmanSoapHeaders.maxEnvelopeSize) != MI_RESULT_OK)

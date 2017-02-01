@@ -71,6 +71,7 @@ struct Options
     MI_Boolean xml;
     MI_Uint32 maxEnvSize;
     MI_Uint32 maxElements;
+    const MI_Char *packetEncoding;    // default, utf8, or utf16
 };
 
 static struct Options opts;
@@ -99,7 +100,8 @@ static struct Options opts_default = {
      MI_FALSE,         // MI_Boolean synchronous;
      MI_FALSE,         // MI_Boolean xml;
      0,           // MI_Uint32 maxEnvSize;
-     0            // MI_Uint32 maxElements;
+     0,            // MI_Uint32 maxElements;
+     MI_T("default")    // const MI_Char *packetEncoding;
   };
 
 static void err(const ZChar* fmt, ...)
@@ -2214,6 +2216,7 @@ static MI_Result GetCommandLineOptions(
         MI_T("--port:"),
         MI_T("--maxenvsize:"),
         MI_T("--maxelements:"),
+        MI_T("--packetencoding:"),
         NULL,
     };
 
@@ -2390,6 +2393,19 @@ static MI_Result GetCommandLineOptions(
         else if (Tcscmp(state.opt, PAL_T("--maxelements")) == 0)
         {
             opts.maxElements = Tcstol(state.arg, NULL, 10);
+        }
+        else if (Tcscmp(state.opt, PAL_T("--packetencoding")) == 0)
+        {
+            if ((Tcscasecmp(PAL_T("default"),  state.arg) == 0 ) ||
+                (Tcscasecmp(PAL_T("utf8"), state.arg) == 0 ) ||
+                (Tcscasecmp(PAL_T("utf16"),  state.arg) == 0 ) ) 
+            {
+                opts.packetEncoding = state.arg;
+            }
+            else 
+            {
+                err(PAL_T("invalid value for packetencoding. allowed values are : default, utf8, utf16"));
+            }
         }
 
  #if 0
@@ -2768,6 +2784,34 @@ MI_Result climain(int argc, const MI_Char* argv[])
                 goto CleanupApplication;
             }
             miResult = MI_DestinationOptions_SetPacketPrivacy(miDestinationOptions, privacy);
+            if (miResult != MI_RESULT_OK)
+            {
+                goto CleanupApplication;
+            }
+        }
+
+        if (opts.packetEncoding)
+        {
+            const MI_Char *encoding;
+
+            if (Tcscasecmp(PAL_T("default"),  opts.packetEncoding) == 0 )
+            {
+                encoding = MI_DESTINATIONOPTIONS_PACKET_ENCODING_DEFAULT;
+            }
+            else if (Tcscasecmp(PAL_T("utf8"),  opts.packetEncoding) == 0 )
+            {
+                encoding = MI_DESTINATIONOPTIONS_PACKET_ENCODING_UTF8;
+            }
+            else if (Tcscasecmp(PAL_T("utf16"),  opts.packetEncoding) == 0 )
+            {
+                encoding = MI_DESTINATIONOPTIONS_PACKET_ENCODING_UTF16;
+            }
+            else
+            {
+                goto CleanupApplication;
+            }            
+
+            miResult = MI_DestinationOptions_SetPacketEncoding(miDestinationOptions, encoding);
             if (miResult != MI_RESULT_OK)
             {
                 goto CleanupApplication;
