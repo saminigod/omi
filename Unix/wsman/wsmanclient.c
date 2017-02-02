@@ -47,6 +47,12 @@ typedef struct _EnumerationState
     XML_Elem e;
 }EnumerationState;
 
+typedef enum _PacketEncoding
+{
+    PACKET_ENCODING_UTF_8,
+    PACKET_ENCODING_UTF_16
+} PacketEncoding;
+
 struct _WsmanClient
 {
     Batch *batch;
@@ -67,6 +73,7 @@ struct _WsmanClient
     MI_Boolean isShell;
     Page *responsePage;
     const char *redirectLocation;
+    PacketEncoding encoding;
 };
 
 
@@ -1313,10 +1320,12 @@ MI_Result WsmanClient_New_Connector(
         if (Tcscmp(packetEncoding, MI_DESTINATIONOPTIONS_PACKET_ENCODING_UTF16) == 0)
         {
             self->contentType = "Content-Type: application/soap+xml;charset=UTF-16";
+            self->encoding = PACKET_ENCODING_UTF_16;
         }
         else if (Tcscmp(packetEncoding, MI_DESTINATIONOPTIONS_PACKET_ENCODING_UTF8) == 0)
         {
             self->contentType = "Content-Type: application/soap+xml;charset=UTF-8";
+            self->encoding = PACKET_ENCODING_UTF_8;
         }
         else
         {
@@ -1411,8 +1420,49 @@ MI_Result WsmanClient_Delete(WsmanClient *self)
 }
 
 
+MI_Result _Payload_Conversion(Batch *batch, PacketEncoding encoding, Page **data)
+{
+#if defined(CONFIG_ENABLE_WCHAR)
+    if (encoding == PACKET_ENCODING_UTF_8)
+    {
+        MI_Boolean ret;
+        char *to;
+        MI_Char16 *p;
+
+        const MI_Char16 *from = *data + 1;
+        size_t fromBuffLen = Utf16LeStrLenBytes(from);
+
+        ret = Utf16LeToUtf8(batch, from, &to);
+        size_t wsize = fromBuffLen * sizeof(MI_Char16);
+        Page* page = (Page*)PAL_Malloc(sizeof(Page) + wsize);
+        if (!page)
+            return MI_RESULT_SERVER_LIMITS_EXCEEDED;
+
+        page->u.s.independent = 0;
+        page->u.s.next = NULL;
+        page->u.s.size = wsize;
+
+        p = (MI_Char16 *)(page + 1);
+        
+        while (fromBuffLen--)
+        {
+            *p++ = *from++;
+        }
+
+        PAL_Free(*data);
+        *data = page;
+    }
+    else
+    {
+        // add BOM
+    }
+#else
+#endif
+}
+
 MI_Result WsmanClient_StartRequest(WsmanClient* self, Page** data, const Probable_Cause_Data **cause )
 {
+    Payload_Conversion(self->batch, self->encoding, data);
     return HttpClient_StartRequestV2(self->httpClient, "POST", self->httpUrl, self->contentType, NULL, NULL, data, cause);
 }
 

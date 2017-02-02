@@ -39,7 +39,8 @@ SOURCE_FILES = \
     ownedmemory.c \
     log.c \
     alloc.c \
-    atexit.c
+    atexit.c \
+    BufferManipulation.c
 
 ifeq ($(OBJDIRBASE),nitspal)
 SOURCES = $(SOURCE_FILES)
