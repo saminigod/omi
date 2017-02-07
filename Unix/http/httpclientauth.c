@@ -883,19 +883,27 @@ MI_Boolean HttpClient_DecryptData(_In_ HttpClient_SR_SocketData * handler, _Out_
 
                     // Scan to the end of the line
                     while (!('\n' == scanp[0] && '\r' == scanp[-1]) && scanp < scanlimit && !done)
+                    {
                         scanp++;
+                    }
 
                     linelimit = scanp - 1;
 
                     linep += CONTENT_TYPE_LEN;
                     while (isspace(*linep) && linep < linelimit)
+                    {
                         linep++;
+                    }
 
                     if (':' == *linep && linep < linelimit)
+                    {
                         linep++;
+                    }
 
                     while (isspace(*linep) && linep < linelimit)
+                    {
                         linep++;
+                    }
 
                     if (Strncasecmp(linep, OCTET_STREAM, OCTET_STREAM_LEN) == 0)
                     {
@@ -947,7 +955,9 @@ MI_Boolean HttpClient_DecryptData(_In_ HttpClient_SR_SocketData * handler, _Out_
                             linep += TYPE_FIELD_LEN;
                             original_content_type = linep;
                             while (';' != *linep && *linep && linep < linelimit)
+                            {
                                 linep++;
+                            }
                             *linep++ = '\0';
                             memcpy(original_content_type_save, original_content_type, linep - original_content_type);
                             original_content_type = original_content_type_save;
@@ -1146,7 +1156,9 @@ HttpClient_EncryptData(_In_ HttpClient_SR_SocketData * handler, _Out_ Page **pHe
     phdr++;
 
     while (isspace(*phdr))
+    {
         phdr++;
+    }
     original_content_type = phdr;
     phdr = strchr(phdr, ';');
     *phdr++ = '\0';
@@ -1579,16 +1591,23 @@ HttpClient_NextAuthRequest(_In_ struct _HttpClient_SR_SocketData * self, _In_ co
     static const size_t POST_HEADER_LEN = MI_COUNT(POST_HEADER)-1;
 
     
-    const gss_OID_desc mech_krb5 = { 9, "\052\206\110\206\367\022\001\002\002" };
-    const gss_OID_desc mech_spnego = { 6, "\053\006\001\005\005\002" };
-    const gss_OID_desc mech_iakerb = { 6, "\053\006\001\005\002\005" };
+    //const gss_OID_desc mech_krb5 = { 9, "\052\206\110\206\367\022\001\002\002" };
+    //const gss_OID_desc mech_spnego = { 6, "\053\006\001\005\005\002" };
+    //const gss_OID_desc mech_iakerb = { 6, "\053\006\001\005\002\005" };
     // const gss_OID_desc mech_ntlm   = {10, "\x2b\x06\x01\x04\x01\x82\x37\x02\x02\x0a" };
     // gss_OID_set_desc mechset_krb5 = { 1, &mech_krb5 };
     // gss_OID_set_desc mechset_iakerb = { 1, &mech_iakerb };
-    const gss_OID_set_desc mechset_spnego = { 1, (gss_OID) & mech_spnego };
+    const gss_OID_desc mechset_avail_elems[] = {
+        { 6, "\053\006\001\005\005\002" },                  // Spnego
+        { 10, "\x2b\x06\x01\x04\x01\x82\x37\x02\x02\x0a" }, // ntlm
+        { 9, "\052\206\110\206\367\022\001\002\002" },      // mech_krb5
+        { 6, "\053\006\001\005\002\005" }                   // mech_iakerb
+    };
+    const gss_OID_set_desc mechset_avail = { 4, (gss_OID) mechset_avail_elems };
     
-    const gss_OID mechset_krb5_elems[] = { (gss_OID)&mech_krb5,
-        (gss_OID)&mech_iakerb
+    const gss_OID_desc mechset_krb5_elems[] = { 
+        { 9, "\052\206\110\206\367\022\001\002\002" },      // mech_krb5
+        { 6, "\053\006\001\005\002\005" }                   // mech_iakerb
     };
     
     const gss_OID_set_desc mechset_krb5 = { 2, (gss_OID) mechset_krb5_elems };
@@ -1619,7 +1638,7 @@ HttpClient_NextAuthRequest(_In_ struct _HttpClient_SR_SocketData * self, _In_ co
     {
     case AUTH_METHOD_NEGOTIATE_WITH_CREDS:
     case AUTH_METHOD_NEGOTIATE:
-        mechset = (gss_OID_set) & mechset_spnego;
+        mechset = (gss_OID_set) & mechset_avail;
         break;
     
     case AUTH_METHOD_KERBEROS:
@@ -1753,13 +1772,9 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
 {
     char *rslt = NULL;
 
-    const gss_OID_desc mech_krb5 = { 9, "\052\206\110\206\367\022\001\002\002" };
-    //const gss_OID_desc mech_spnego = { 6, "\053\006\001\005\005\002" };
-    const gss_OID_desc mech_iakerb = { 6, "\053\006\001\005\002\005" };
-    //const gss_OID_set_desc mechset_spnego = { 1, (gss_OID) & mech_spnego };
-
-    const gss_OID mechset_krb5_elems[] = { (gss_OID)&mech_krb5,
-        (gss_OID)&mech_iakerb
+    const gss_OID_desc mechset_krb5_elems[] = { 
+        { 9, "\052\206\110\206\367\022\001\002\002" },      // mech_krb5
+        { 6, "\053\006\001\005\002\005" }                   // mech_iakerb
     };
 
     const gss_OID_set_desc mechset_krb5 = { 2, (gss_OID) mechset_krb5_elems };
@@ -1772,12 +1787,19 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
     const gss_OID_desc mechset_avail_elems[] = {
         { 6, "\053\006\001\005\005\002" },                  // Spnego
         { 10, "\x2b\x06\x01\x04\x01\x82\x37\x02\x02\x0a" }, // ntlm
-        // mech_krb5,   Not yet
-        // mech_iakerb,  Not yet
+        { 9, "\052\206\110\206\367\022\001\002\002" },      // mech_krb5
+        { 6, "\053\006\001\005\002\005" }                   // mech_iakerb
     };
-    const gss_OID_set_desc mechset_avail = { 2, (gss_OID) mechset_avail_elems };
+    const gss_OID_set_desc mechset_avail = { 4, (gss_OID) mechset_avail_elems };
 
     static const char WSMAN_PROTOCOL[] = "WSMAN/";
+
+    static const Probable_Cause_Data AUTH_ERROR = {
+              ERROR_ACCESS_DENIED,
+              WSMAN_CIMERROR_PROBABLE_CAUSE_AUTHENTICATION_FAILURE,
+              MI_T("Authentication Failure") 
+       };
+    
 
    
     OM_uint32 maj_stat, min_stat;
@@ -1905,7 +1927,7 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
 
         if (_g_gssClientState.gssSetNegMechs)
         {
-            maj_stat = (*_g_gssClientState.gssSetNegMechs)(&min_stat, cred, (gss_OID_set)&mechset_avail);
+            maj_stat = (*_g_gssClientState.gssSetNegMechs)(&min_stat, cred, (const gss_OID_set)&mechset_avail);
             if (maj_stat != GSS_S_COMPLETE)
             {
                 _ReportError(self, "setting neg mechs", maj_stat, min_stat);
@@ -1973,10 +1995,10 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
 
     if (self->isPrivate)
     {
-        self->negoFlags = (GSS_C_INTEG_FLAG | GSS_C_CONF_FLAG);
+        self->negoFlags = (GSS_C_INTEG_FLAG | GSS_C_CONF_FLAG |  GSS_C_REPLAY_FLAG);
     }
 
-    maj_stat = (*_g_gssClientState.Gss_Init_Sec_Context)(&min_stat, cred, &context_hdl, target_name, mechset->elements, self->negoFlags,   // flags
+    maj_stat = (*_g_gssClientState.Gss_Init_Sec_Context)(&min_stat, cred, &context_hdl, target_name, mechset->elements, self->negoFlags, 
                                     0,  // time_req,
                                     GSS_C_NO_CHANNEL_BINDINGS,  // input_chan_bindings,
                                     GSS_C_NO_BUFFER, NULL, &output_token, &self->negoFlags, 0);   // time_req
@@ -2006,6 +2028,29 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
     }
     else {
         // Unexpected here
+        HttpClient *client = (HttpClient *) self->base.data;
+    
+        // Handle errors
+        gss_buffer_desc gss_msg = { 0 };
+        gss_buffer_desc mech_msg = { 0 };
+    
+        _getStatusMsg(maj_stat, GSS_C_GSS_CODE, &gss_msg);
+        _getStatusMsg(min_stat, GSS_C_MECH_CODE, &mech_msg);
+        trace_HTTP_ClientAuthFailed(gss_msg.value, mech_msg.value);
+#if defined(CONFIG_ENABLE_WCHAR)
+        (void)Swprintf(g_ErrBuff, sizeof(g_ErrBuff), 
+                       L"Access Denied %s %s\n",
+                       (char *)gss_msg.value, (char *)mech_msg.value);
+#else
+        (void)Snprintf(g_ErrBuff, sizeof(g_ErrBuff),
+                       "Access Denied %s %s\n",
+                       (char *)gss_msg.value, (char *)mech_msg.value);
+#endif
+    
+        (*(HttpClientCallbackOnStatus2)(client->callbackOnStatus)) (client, client->callbackData, MI_RESULT_OK, g_ErrBuff, &AUTH_ERROR);
+    
+        (*_g_gssClientState.Gss_Release_Buffer)(&min_stat, &gss_msg);
+        (*_g_gssClientState.Gss_Release_Buffer)(&min_stat, &mech_msg);
     }
 
     (*_g_gssClientState.Gss_Release_Name)(&min_stat, &gss_username);
