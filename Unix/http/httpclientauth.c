@@ -33,9 +33,14 @@
 
 #include "httpcommon.h"
 
+#define GSS_USE_IOV 1
+
 #define ENABLE_TRACING 1
 #define FORCE_TRACING  1
 
+#if GSS_USE_IOV
+#include <gssapi/gssapi_ext.h>
+#endif
 #ifdef CONFIG_POSIX
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -176,6 +181,22 @@ typedef OM_uint32 KRB5_CALLCONV (*Gss_Release_Buffer_Func)(OM_uint32 * minor_sta
 typedef OM_uint32 KRB5_CALLCONV (*Gss_Release_Cred_Func)(OM_uint32 * minor_status, gss_cred_id_t * cred_handle);
 typedef OM_uint32 KRB5_CALLCONV (*Gss_Release_Name_Func)(OM_uint32 * minor_status, gss_name_t * name);
 
+#if GSS_USE_IOV
+typedef OM_uint32 KRB5_CALLCONV (*Gss_Unwrap_Func_Iov)(OM_uint32 * minor_status,
+                            const gss_ctx_id_t context_handle,
+                            const gss_buffer_t input_message_buffer,
+                            int *conf_state, gss_qop_t * qop_state,
+                            gss_iov_buffer_desc *iov, int iov_cnt );
+
+typedef OM_uint32 KRB5_CALLCONV (*Gss_Wrap_Func_Iov)(OM_uint32 * minor_status,
+                            const gss_ctx_id_t context_handle,
+                            int conf_req_flag,
+                            gss_qop_t qop_req,
+                            int *conf_state,
+                            gss_iov_buffer_desc *iov, int iov_cnt );
+
+#endif
+
 typedef OM_uint32 KRB5_CALLCONV (*Gss_Unwrap_Func)(OM_uint32 * minor_status,
                             const gss_ctx_id_t context_handle,
                             const gss_buffer_t input_message_buffer,
@@ -214,10 +235,15 @@ typedef struct _Gss_Extensions
     Gss_Release_Name_Func       Gss_Release_Name;
     Gss_Unwrap_Func             Gss_Unwrap;
     Gss_Wrap_Func               Gss_Wrap;
+#if GSS_USE_IOV
+    Gss_Unwrap_Func_Iov         Gss_Unwrap_Iov;
+    Gss_Wrap_Func_Iov           Gss_Wrap_Iov;
+#endif
 
     gss_OID Gss_Nt_Service_Name;
+    gss_OID Gss_Nt_HostBased_Service_Name;
+    gss_OID Gss_Krb5_Nt_Principal_Name;
     gss_OID Gss_C_Nt_User_Name;
-
 } Gss_Extensions;
 
 static Gss_Extensions _g_gssClientState = { 0 };
@@ -606,6 +632,24 @@ static _Success_(return == 0) int _GssClientInitLibrary( _In_ void* data, _Outpt
         }
         _g_gssClientState.Gss_Wrap   = (Gss_Wrap_Func) fn_handle;
 
+#if GSS_USE_IOV
+        fn_handle = dlsym(libhandle, "gss_unwrap_iov");
+        if (!fn_handle)
+        {
+            trace_HTTP_GssFunctionNotPresent("gss_unwrap_iov");
+            goto failed;
+        }
+        _g_gssClientState.Gss_Unwrap_Iov = (Gss_Unwrap_Func_Iov) fn_handle;
+
+        fn_handle = dlsym(libhandle, "gss_wrap_iov");
+        if (!fn_handle)
+        {
+            trace_HTTP_GssFunctionNotPresent("gss_wrap_iov");
+            goto failed;
+        }
+        _g_gssClientState.Gss_Wrap_Iov = (Gss_Wrap_Func_Iov) fn_handle;
+#endif        
+
         fn_handle = dlsym(libhandle, GSS_NT_SERVICE_NAME_REF);
         if (!fn_handle)
         {
@@ -629,6 +673,30 @@ static _Success_(return == 0) int _GssClientInitLibrary( _In_ void* data, _Outpt
        _g_gssClientState.Gss_C_Nt_User_Name  = (gss_OID)fn_handle;
 #else
        _g_gssClientState.Gss_C_Nt_User_Name  = *(gss_OID*)fn_handle;
+#endif
+
+        fn_handle = dlsym(libhandle, "GSS_C_NT_HOSTBASED_SERVICE");
+        if (!fn_handle)
+        {
+            trace_HTTP_GssFunctionNotPresent("GSS_C_NT_HOSTBASED_SERVICE");
+            goto failed;
+        }
+#if HEIMDAL
+       _g_gssClientState.Gss_Nt_HostBased_Service_Name  = (gss_OID)fn_handle;
+#else
+       _g_gssClientState.Gss_Nt_HostBased_Service_Name  = *(gss_OID*)fn_handle;
+#endif
+
+        fn_handle = dlsym(libhandle, "GSS_KRB5_NT_PRINCIPAL_NAME");
+        if (!fn_handle)
+        {
+            trace_HTTP_GssFunctionNotPresent("GSS_KRB5_NT_PRINCIPAL_NAME");
+            goto failed;
+        }
+#if HEIMDAL
+       _g_gssClientState.Gss_Krb5_Nt_Principal_Name = (gss_OID)fn_handle;
+#else
+       _g_gssClientState.Gss_Krb5_Nt_Principal_Name = *(gss_OID*)fn_handle;
 #endif
        _g_gssClientState.libHandle    = libhandle;
        _g_gssClientState.gssLibLoaded = LOADED;
@@ -755,7 +823,7 @@ MI_Boolean HttpClient_DecryptData(_In_ HttpClient_SR_SocketData * handler, _Out_
     char *segp = NULL;
     char *linep = NULL;
     char *linelimit = NULL;
-    int flags = (int)handler->negoFlags;
+    int flags = (int)handler->negoFlags&(GSS_C_INTEG_FLAG|GSS_C_CONF_FLAG);
     uint32_t sig_len = 0;
     //uint32_t sig_flags = 0;
 
@@ -794,11 +862,16 @@ MI_Boolean HttpClient_DecryptData(_In_ HttpClient_SR_SocketData * handler, _Out_
     static const char APPLICATION_SPNEGO[] = "application/HTTP-SPNEGO-session-encrypted";   // 2do: compare to header protocol
     static const size_t APPLICATION_SPNEGO_LEN = MI_COUNT(APPLICATION_SPNEGO) - 1;
 
+    static const char APPLICATION_KERBEROS[] = "application/HTTP-Kerberos-session-encrypted";
+    static const size_t APPLICATION_KERBEROS_LEN = MI_COUNT(APPLICATION_KERBEROS) - 1;
+
     static const char MULTIPART_ENCRYPTED[] = "multipart/encrypted";
     static const size_t MULTIPART_ENCRYPTED_LEN = MI_COUNT(MULTIPART_ENCRYPTED) - 1;
 
+
     const char *content_type = NULL;
     const char *content_len_str = NULL;
+
     //char *char_set = NULL;
 
     if (!pHeaders)
@@ -920,7 +993,12 @@ MI_Boolean HttpClient_DecryptData(_In_ HttpClient_SR_SocketData * handler, _Out_
                     }
                     else if (Strncasecmp(linep, APPLICATION_SPNEGO, APPLICATION_SPNEGO_LEN) == 0)
                     {
-                        // Should be application/HTTP-SPNEGO-session-encrypted
+                        // Should be application/HTTP-SPNEGO-session-encrypted for spnego
+
+                    }
+                    else if (Strncasecmp(linep, APPLICATION_KERBEROS, APPLICATION_KERBEROS_LEN) == 0)
+                    {
+                        // Should be application/HTTP-Kerberos-session-encrypted for kerberos
 
                     }
                     else
@@ -1067,14 +1145,20 @@ HttpClient_EncryptData(_In_ HttpClient_SR_SocketData * handler, _Out_ Page **pHe
     const char *pnum = NULL;
     size_t str_len = 0;
 
-    static const char MULTIPART_ENCRYPTED[] = "multipart/encrypted;"
-        "protocol=\"application/HTTP-SPNEGO-session-encrypted\";" "boundary=\"Encrypted Boundary\"\r\n\r\n";
+    static const char MULTIPART_ENCRYPTED_SPNEGO[] = "multipart/encrypted;"
+        "protocol=\"application/HTTP-SPNEGO-session-encrypted\";" "boundary=\"Encrypted Boundary\"\r\n";
+
+    static const char MULTIPART_ENCRYPTED_KERBEROS[] = "multipart/encrypted;"
+        "protocol=\"application/HTTP-Kerberos-session-encrypted\";" "boundary=\"Encrypted Boundary\"\r\n";
 
     static const char ENCRYPTED_BOUNDARY[] = "--Encrypted Boundary\r\n";
     static const size_t ENCRYPTED_BOUNDARY_LEN = MI_COUNT(ENCRYPTED_BOUNDARY) - 1;  // do not count the null
 
-    static const char ENCRYPTED_BODY_CONTENT_TYPE[] = "Content-Type: application/HTTP-SPNEGO-session-encrypted\r\n";
-    static const size_t ENCRYPTED_BODY_CONTENT_TYPE_LEN = MI_COUNT(ENCRYPTED_BODY_CONTENT_TYPE) - 1;
+    static const char ENCRYPTED_SPNEGO_BODY_CONTENT_TYPE[] = "Content-Type: application/HTTP-SPNEGO-session-encrypted\r\n";
+    static const size_t ENCRYPTED_SPNEGO_BODY_CONTENT_TYPE_LEN = MI_COUNT(ENCRYPTED_SPNEGO_BODY_CONTENT_TYPE) - 1;
+
+    static const char ENCRYPTED_KERBEROS_BODY_CONTENT_TYPE[] = "Content-Type: application/HTTP-Kerberos-session-encrypted\r\n";
+    static const size_t ENCRYPTED_KERBEROS_BODY_CONTENT_TYPE_LEN = MI_COUNT(ENCRYPTED_KERBEROS_BODY_CONTENT_TYPE) - 1;
 
     static const char ORIGINAL_CONTENT[] = "OriginalContent: type=";
     static const size_t ORIGINAL_CONTENT_LEN = MI_COUNT(ORIGINAL_CONTENT) - 1;
@@ -1113,31 +1197,111 @@ HttpClient_EncryptData(_In_ HttpClient_SR_SocketData * handler, _Out_ Page **pHe
         return MI_TRUE;
     }
 
+    char *MULTIPART_ENCRYPTED;
+    char *ENCRYPTED_BODY_CONTENT_TYPE;
+    size_t ENCRYPTED_BODY_CONTENT_TYPE_LEN;
+
+    switch(handler->authType)
+    {
+    case AUTH_METHOD_NEGOTIATE_WITH_CREDS:
+    case AUTH_METHOD_NEGOTIATE:
+        ENCRYPTED_BODY_CONTENT_TYPE = (char*)ENCRYPTED_SPNEGO_BODY_CONTENT_TYPE;
+        ENCRYPTED_BODY_CONTENT_TYPE_LEN = (size_t)ENCRYPTED_SPNEGO_BODY_CONTENT_TYPE_LEN;
+        MULTIPART_ENCRYPTED = (char*)MULTIPART_ENCRYPTED_SPNEGO;
+        break;
+
+    case AUTH_METHOD_KERBEROS:
+        ENCRYPTED_BODY_CONTENT_TYPE     = (char*)ENCRYPTED_KERBEROS_BODY_CONTENT_TYPE;
+        ENCRYPTED_BODY_CONTENT_TYPE_LEN = (size_t)ENCRYPTED_KERBEROS_BODY_CONTENT_TYPE_LEN;
+        MULTIPART_ENCRYPTED = (char*)MULTIPART_ENCRYPTED_KERBEROS;
+        break;
+
+    default:
+        trace_Wsman_UnsupportedAuthentication("Unknown");
+        return MI_FALSE;
+    }
+
     char *original_content_type = NULL;
     char *original_encoding = NULL;
     int original_content_len = (*pData)->u.s.size;
     char *poriginal_data = (char *)(*pData + 1);
 
-    gss_buffer_desc input_buffer = { original_content_len, poriginal_data };
     gss_buffer_desc output_buffer = { 0 };
     OM_uint32 min_stat, maj_stat;
     int out_flags;
 
-    maj_stat = (*_g_gssClientState.Gss_Wrap)(&min_stat, handler->authContext, (handler->negoFlags & (GSS_C_INTEG_FLAG | GSS_C_CONF_FLAG)),
+#if GSS_USE_IOV
+
+    gss_iov_buffer_desc iov[4] = {{0}};
+
+    iov[0].type = GSS_IOV_BUFFER_TYPE_HEADER  | GSS_IOV_BUFFER_FLAG_ALLOCATE;
+
+    iov[1].type = GSS_IOV_BUFFER_TYPE_DATA;
+    iov[1].buffer.length = original_content_len;
+    iov[1].buffer.value  = poriginal_data;
+
+#if 0
+    iov[2].type = GSS_IOV_BUFFER_TYPE_PADDING | GSS_IOV_BUFFER_FLAG_ALLOCATE;
+
+    iov[3].type = GSS_IOV_BUFFER_TYPE_TRAILER | GSS_IOV_BUFFER_FLAG_ALLOCATE;
+#endif    
+
+    maj_stat = (*_g_gssClientState.Gss_Wrap_Iov)(&min_stat, handler->authContext, (handler->negoFlags & GSS_C_CONF_FLAG),
+                        GSS_C_QOP_DEFAULT, &out_flags, iov, 2);
+
+    output_buffer.length = (iov[0].buffer.length+iov[1].buffer.length/*+iov[2].buffer.length+iov[3].buffer.length*/);
+    output_buffer.value = PAL_Malloc(output_buffer.length);
+
+    char *outbufp = output_buffer.value;
+    if (iov[0].buffer.length)
+    {
+        memcpy(outbufp, iov[0].buffer.value, iov[0].buffer.length);
+        outbufp += iov[0].buffer.length;
+    }
+
+    if (iov[1].buffer.length)
+    {
+        memcpy(outbufp, iov[1].buffer.value, iov[1].buffer.length);
+        outbufp += iov[1].buffer.length;
+    }
+
+#if 0
+    if (iov[2].buffer.length)
+    {
+        memcpy(outbufp, iov[2].buffer.value, iov[2].buffer.length);
+        outbufp += iov[1].buffer.length;
+    }
+
+    if (iov[3].buffer.length)
+    {
+        memcpy(outbufp, iov[3].buffer.value, iov[3].buffer.length);
+        outbufp += iov[1].buffer.length;
+    }
+#endif    
+
+#else
+    gss_buffer_desc input_buffer = { original_content_len, poriginal_data };
+    maj_stat = (*_g_gssClientState.Gss_Wrap)(&min_stat, handler->authContext, (handler->negoFlags & GSS_C_CONF_FLAG),
                         GSS_C_QOP_DEFAULT, &input_buffer, &out_flags, &output_buffer);
+#endif                                    
 
     if (maj_stat != GSS_S_COMPLETE)
     {
         _ReportError(handler, "gss_wrap failed", maj_stat, min_stat);
+#if !GSS_USE_IOV        
         (*_g_gssClientState.Gss_Release_Buffer)(&min_stat, &output_buffer);
+#endif        
         return MI_FALSE;
     }
 
+#if !GSS_USE_IOV
     gss_buffer_desc token = { 0 };
 
     // We need to get the proper length from the token, but for now 16 bytes is correct for all 
     // protocols
-    token.length = 16;
+
+    token.length = 32;
+#endif    
 
     // clone the header
 
@@ -1210,8 +1374,18 @@ HttpClient_EncryptData(_In_ HttpClient_SR_SocketData * handler, _Out_ Page **pHe
     {
          *pdst = *psrc;
     }
+
     memcpy(pdst, MULTIPART_ENCRYPTED, strlen(MULTIPART_ENCRYPTED));
     pdst += strlen(MULTIPART_ENCRYPTED);
+
+    psrc = handler->hostHeader;
+    for (; *psrc; psrc++, pdst++)
+    {
+         *pdst = *psrc;
+    }
+    *pdst++ = '\r';
+    *pdst++ = '\n';
+
 
 //    PAL_Free(*pHeader); We hav no way of knowing how the pHeader got there
     pNewHeaderPage->u.s.size = pdst - pNewHeader;
@@ -1263,7 +1437,11 @@ HttpClient_EncryptData(_In_ HttpClient_SR_SocketData * handler, _Out_ Page **pHe
     memcpy(buffp, ENCRYPTED_OCTET_CONTENT_TYPE, ENCRYPTED_OCTET_CONTENT_TYPE_LEN);
     buffp += ENCRYPTED_OCTET_CONTENT_TYPE_LEN;
 
+#if GSS_USE_IOV
+    int siglen = ByteSwapToWindows32(iov[0].buffer.length);
+#else
     int siglen = ByteSwapToWindows32(token.length);
+#endif    
 
     memcpy(buffp, &siglen, 4);
     buffp += 4;
@@ -1278,7 +1456,9 @@ HttpClient_EncryptData(_In_ HttpClient_SR_SocketData * handler, _Out_ Page **pHe
 
     *pData = pNewData;
 
+#if !GSS_USE_IOV
     (*_g_gssClientState.Gss_Release_Buffer)(&min_stat, &output_buffer);
+#endif    
 
     return MI_TRUE;
 
@@ -1372,20 +1552,36 @@ static int _Base64DecCallback(const void *data, size_t length, void *callbackDat
 
 */
 
-static int _getInputToken(const char *authorization, gss_buffer_t token)
+static int _getInputToken(_In_ struct _HttpClient_SR_SocketData * self,  const char *authorization, gss_buffer_t token)
 {
-    const char *spnegoToken = authorization + AUTHENTICATION_NEGOTIATE_LENGTH + 1;
+    const char *auth = authorization;
 
-    token->value = (unsigned char *)PAL_Malloc(strlen(spnegoToken));
+    switch (self->authType)
+    {
+    case AUTH_METHOD_NEGOTIATE_WITH_CREDS:
+    case AUTH_METHOD_NEGOTIATE:
+        auth += AUTHENTICATION_NEGOTIATE_LENGTH + 1;
+        break;
+    
+    case AUTH_METHOD_KERBEROS:
+        auth += AUTHENTICATION_KERBEROS_LENGTH + 1;
+        break;
+    
+    default:
+
+        // traceUnknownAuthType
+        return -1;
+    }
+
+    token->value = (unsigned char *)PAL_Malloc(strlen(auth));
     if (!token->value)
     {
         return -1;
     }
-    memset(token->value, 0, strlen(spnegoToken));
+    memset(token->value, 0, strlen(auth));
     token->length = 0;
 
-    int decodedSize = Base64Dec((const void *)spnegoToken, strlen(spnegoToken),
-                                _Base64DecCallback, token);
+    int decodedSize = Base64Dec((const void *)auth, strlen(auth), _Base64DecCallback, token);
 
     if (decodedSize <= 0)
     {
@@ -1662,12 +1858,17 @@ HttpClient_NextAuthRequest(_In_ struct _HttpClient_SR_SocketData * self, _In_ co
     self->isAuthorized = FALSE;
     
 
-    if (_getInputToken(pResponseHeader, &input_token) != 0)
+    if (_getInputToken(self, pResponseHeader, &input_token) != 0)
     {
         _ReportError(self, "Authorization failed", maj_stat, min_stat);
         self->authorizing = FALSE;
         self->isAuthorized = FALSE;
         return PRT_RETURN_FALSE;
+    }
+
+    if (self->isPrivate)
+    {
+        self->negoFlags = (GSS_C_INTEG_FLAG | GSS_C_CONF_FLAG |  GSS_C_REPLAY_FLAG | GSS_C_MUTUAL_FLAG);
     }
 
     // (void)DecodeToken(&input_token);
@@ -1800,7 +2001,6 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
               MI_T("Authentication Failure") 
        };
     
-
    
     OM_uint32 maj_stat, min_stat;
 
@@ -1856,9 +2056,20 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
     if (self->username != NULL)
     {
         gss_buffer_desc buf;
+        char buffer[1024];
+        char *bufp = &buffer[0];
 
-        buf.value = self->username;
-        buf.length = Strlen(self->username);
+        strcpy(bufp, self->username);
+        bufp += strlen(self->username);
+
+        if (self->user_domain)
+        {
+            *bufp++ = '@';
+            strcpy(bufp, self->user_domain);
+            bufp += strlen(self->user_domain);
+        }
+        buf.value = buffer;
+        buf.length = bufp-buffer;
 
         maj_stat = (*_g_gssClientState.Gss_Import_Name)(&min_stat, &buf, _g_gssClientState.Gss_C_Nt_User_Name, &gss_username);
 
@@ -1887,8 +2098,17 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
                 if (maj_stat != GSS_S_COMPLETE)
                 {
                     _ReportError(self, "acquiring creds with password failed", maj_stat, min_stat);
-                    (*_g_gssClientState.Gss_Release_Name)(&min_stat, &gss_username);
-                    return NULL;
+
+                    maj_stat = (*_g_gssClientState.Gss_Acquire_Cred)(&min_stat, gss_username, 0,
+                                            mechset, GSS_C_INITIATE, &cred, NULL, NULL);
+
+                    if (maj_stat != GSS_S_COMPLETE)
+                    {
+                        _ReportError(self,
+                                 "acquiring creds with username only failed", maj_stat, min_stat);
+                        (*_g_gssClientState.Gss_Release_Name)(&min_stat, &gss_username);
+                         return NULL;
+                    }
                 }
             }
         }
@@ -1950,17 +2170,20 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
         struct addrinfo hints, *info;
         int gai_result;
 
+#if 0
         char hostname[1024];
         hostname[1023] = '\0';
 
         gethostname(hostname, 1023);
+#endif        
 
+#if 1
         memset(&hints, 0, sizeof hints);
         hints.ai_family = AF_UNSPEC;    /*either IPV4 or IPV6 */
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_flags = AI_CANONNAME;
 
-        if ((gai_result = getaddrinfo(hostname, "http", &hints, &info)) != 0)
+        if ((gai_result = getaddrinfo(self->hostname, "http", &hints, &info)) != 0)
         {
             trace_HTTP_GetAddrInfoError(gai_strerror(gai_result));
             return NULL;
@@ -1975,9 +2198,34 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
 
         buff.length = protocol_len + strlen(info->ai_canonname);
         buff.value = PAL_Malloc(buff.length + 1);
+        char *bufp = (char*)buff.value;
+
+        memset(buff.value, 0, buff.length+1);
         memcpy(buff.value, protocol, protocol_len);
+        bufp += protocol_len;
+
+        memcpy(bufp, info->ai_canonname, strlen(info->ai_canonname));
+        bufp += strlen(info->ai_canonname);
+        *bufp++ = '\0';
+
+
+
+
+#else
+        buff.length = protocol_len + strlen(self->username)+strlen(self->hostname)+strlen(self->user_domain)+2;
+        buff.value = PAL_Malloc(buff.length + 1);
+        char *bufp = (char*)buff.value;
+
+        memcpy(buff.value, protocol, protocol_len);
+        bufp += protocol_len;
+
         memcpy(((MI_Char *) buff.value) + protocol_len,
-               info->ai_canonname, strlen(info->ai_canonname));
+               self->username, strlen(self->username));
+        
+        memcpy(((MI_Char *) buff.value) + protocol_len,
+               self->username, strlen(self->username));
+        
+#endif                
 
         ((MI_Char *) buff.value)[buff.length] = 0; 
 
@@ -1985,7 +2233,7 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
 
         freeaddrinfo(info);
 
-        maj_stat = (*_g_gssClientState.Gss_Import_Name)(&min_stat, &buff, _g_gssClientState.Gss_Nt_Service_Name, &target_name);
+        maj_stat = (*_g_gssClientState.Gss_Import_Name)(&min_stat, &buff, _g_gssClientState.Gss_Krb5_Nt_Principal_Name, &target_name);
         if (maj_stat != GSS_S_COMPLETE)
         {
             _ReportError(self, "parsing name", maj_stat, min_stat);
@@ -1995,7 +2243,7 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
 
     if (self->isPrivate)
     {
-        self->negoFlags = (GSS_C_INTEG_FLAG | GSS_C_CONF_FLAG |  GSS_C_REPLAY_FLAG);
+        self->negoFlags = (GSS_C_INTEG_FLAG | GSS_C_CONF_FLAG |  GSS_C_REPLAY_FLAG | GSS_C_MUTUAL_FLAG);
     }
 
     maj_stat = (*_g_gssClientState.Gss_Init_Sec_Context)(&min_stat, cred, &context_hdl, target_name, mechset->elements, self->negoFlags, 
@@ -2022,9 +2270,46 @@ static char *_BuildInitialGssAuthHeader(_In_ HttpClient_SR_SocketData * self, MI
     }
     else if (maj_stat == GSS_S_COMPLETE)
     {
-        // Unexpected here
+        MI_Uint32 header_len = 0;
+        
+        // Kerberos will be completed here, probably. But we need to build an auth header
+        // for key exchange
 
+        if (output_token.length > 0)
+        {
+            // We need to build an auth header    
+            rslt = _BuildClientGssAuthHeader(self, &output_token, &header_len);
+        }    
+
+        // If the result is complete, then we are done and can
+        // send whatever request is pending, if any
         *status = GSS_S_COMPLETE;
+
+        trace_HTTP_AuthComplete();
+
+        if ((self->authType == AUTH_METHOD_KERBEROS) && 
+            ((self->negoFlags  & (GSS_C_INTEG_FLAG | GSS_C_CONF_FLAG)) == (GSS_C_INTEG_FLAG | GSS_C_CONF_FLAG)) &&
+            (!(self->negoFlags & GSS_C_PROT_READY_FLAG))) 
+        {    
+            // We may be in complete, but we are not ready to encrypt so we short cirtuit isAuthorised
+            self->authContext = context_hdl;
+            self->targetName = target_name;
+            self->authorizing = TRUE;
+            self->cred = (void *)cred;
+        }
+        else 
+        {        
+            self->encrypting   = (self->negoFlags & (GSS_C_INTEG_FLAG | GSS_C_CONF_FLAG)) == (GSS_C_CONF_FLAG | GSS_C_INTEG_FLAG);       // All data transfered will be encrypted.
+            self->readyToSend  = TRUE;
+            self->authorizing  = FALSE;
+            self->isAuthorized = TRUE;
+            self->cred = (void *)cred;
+        }    
+
+        // *pRequestHeader = NULL;
+
+        return rslt;
+
     }
     else {
         // Unexpected here
@@ -2105,7 +2390,13 @@ Http_CallbackResult HttpClient_RequestAuthorization(_In_ struct _HttpClient_SR_S
 
                 return PRT_RETURN_FALSE;
             }
-
+            else 
+            {
+                if (self->isAuthorized)
+                {
+                    return PRT_RETURN_TRUE;
+                }
+            }                
         }
 
         return PRT_CONTINUE;
@@ -2212,7 +2503,6 @@ Http_CallbackResult HttpClient_IsAuthorized(_In_ struct _HttpClient_SR_SocketDat
             {
             case HTTP_ERROR_CODE_OK:
                 self->encrypting   = (self->negoFlags & (GSS_C_INTEG_FLAG | GSS_C_CONF_FLAG)) == (GSS_C_CONF_FLAG | GSS_C_INTEG_FLAG);       // All data transfered will be encrypted.
-                self->readyToSend  = TRUE;
                 self->readyToSend  = TRUE;
                 self->authorizing = FALSE;
                 self->isAuthorized = TRUE;

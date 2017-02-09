@@ -2959,24 +2959,25 @@ MI_Result HttpClient_StartRequestV2(
         case PRT_CONTINUE:
             // We need to to the auth loop.
 
-        if (self->connector->authType == AUTH_METHOD_BASIC)
-        {
+            if (self->connector->authType == AUTH_METHOD_BASIC)
+            {
                  // Basic sends the payload first time
 
                  break;
             }
+
             self->connector->sendHeader =
                 _CreateHttpAuthRequest(verb, uri, contentType, auth_header, self->connector->hostHeader);
-
-            /* We dont send the data until authorised */
 
             /* Save the request information until we are authorised */
             self->connector->verb = (char *)verb; // BAC Always "POST" but we keep it anyway. It seems to be a literal. Are they static?
             self->connector->uri  = (char *)uri;
             self->connector->contentType = (char *)contentType;
+
+            /* We dont send the data until authorised */
             self->connector->data     = *data;
             self->connector->sendPage = NULL;
-        
+
             /* set status to failed, until we know more details */
             self->connector->status = MI_RESULT_FAILED;
             self->connector->sentSize = 0;
@@ -3013,6 +3014,7 @@ MI_Result HttpClient_StartRequestV2(
     self->connector->base.mask |= SELECTOR_WRITE;
 
     _RequestCallbackWrite(self->connector);
+
     if (auth_header && !authHeader) {
         PAL_Free((MI_Char*)auth_header);
     }
