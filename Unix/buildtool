@@ -784,6 +784,8 @@ if [ "$arg1" = "cflags" -o "$arg1" = "cxxflags" ]; then
             r="$r -D_GNU_SOURCE"
             r="$r -D_XOPEN_SOURCE=600"
             r="$r -DENCRYPT_DECRPYT"
+            r="$r -DGSS_USE_IOV"
+            r="$r -I../external"
 
 	        # _BSD_SOURCE is deprecated on PPC and gcc 6 and later
 
@@ -906,6 +908,8 @@ if [ "$arg1" = "cflags" -o "$arg1" = "cxxflags" ]; then
             r="$r -I/usr/local/include"
             r="$r -Dmacos"
             r="$r -fvisibility=hidden"
+            r="$r -DGSS_USE_IOV"
+            r="$r -I../external"
             ;;
     esac
 

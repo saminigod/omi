@@ -7,12 +7,16 @@
 **==============================================================================
 */
 #include <config.h>
+
 #if AUTHORIZATION
 #if defined(macos)
 #include <GSS/GSS.h>
 #define HEIMDAL 1
 #else
 #include <gssapi/gssapi.h>
+#if GSS_USE_IOV
+#include <gssapi/gssapi_ext.h>
+#endif
 #endif
 #endif
 #include <dlfcn.h>
@@ -33,14 +37,10 @@
 
 #include "httpcommon.h"
 
-#define GSS_USE_IOV 1
 
 #define ENABLE_TRACING 1
 #define FORCE_TRACING  1
 
-#if GSS_USE_IOV
-#include <gssapi/gssapi_ext.h>
-#endif
 #ifdef CONFIG_POSIX
 #include <openssl/ssl.h>
 #include <openssl/err.h>
