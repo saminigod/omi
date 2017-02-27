@@ -1576,6 +1576,7 @@ timestamp=`cat $root/TIMESTAMP`
 ##
 ##==============================================================================
 
+shlibext=`$buildtool shlibext $buildtoolopts`
 fn=$outputdir/config.mak
 
 cat > $fn <<EOF
@@ -1664,6 +1665,7 @@ GSSLIB=$gsslib
 TRAVIS_CI=$travis_ci
 ENABLE_NATIVE_KITS=$enable_native_kits
 ENABLE_ULINUX=$enable_ulinux
+SHLIB_EXT=$shlibext
 EOF
 
 echo "created $fn"
@@ -1707,7 +1709,6 @@ fi
 ##
 ##==============================================================================
 
-shlibext=`$buildtool shlibext $buildtoolopts`
 fnnitsargs=$tmpdir/nitsargs.txt
 
 rm -f $fnnitsargs

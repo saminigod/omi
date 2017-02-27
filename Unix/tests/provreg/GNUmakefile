@@ -11,6 +11,18 @@ DEFINES = TEST_BUILD
 
 LIBRARIES = omi_error wsman http xmlserializer protocol sock provreg ut base pal nits
 
+DEPLIBS = $(LIBDIR)/libomi_error.a \
+          $(LIBDIR)/libwsman.a \
+          $(LIBDIR)/libhttp.a \
+          $(LIBDIR)/libxmlserializer.a \
+          $(LIBDIR)/libprotocol.a \
+          $(LIBDIR)/libsock.a \
+          $(LIBDIR)/libprovreg.a \
+          $(LIBDIR)/libut.a \
+          $(LIBDIR)/libbase.a \
+          $(LIBDIR)/libpal.a \
+          $(LIBDIR)/libnits.$(SHLIB_EXT)
+
 include $(TOP)/mak/rules.mak
 
 tests:

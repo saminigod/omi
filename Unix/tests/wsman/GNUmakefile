@@ -24,6 +24,20 @@ DEFINES = TEST_BUILD
 
 LIBRARIES = mi omiclient miapi micxx $(UNITTESTLIBS) $(INDICMNLIB) $(INDIMGRLIB) wsman http protocol sock omi_error xmlserializer xml pal base
 
+DEPLIBS = $(LIBDIR)/libmi.$(SHLIB_EXT) \
+          $(LIBDIR)/libomiclient.$(SHLIB_EXT) \
+          $(LIBDIR)/libmiapi.a \
+          $(LIBDIR)/libmicxx.$(SHLIB_EXT) \
+          $(LIBDIR)/libwsman.a \
+          $(LIBDIR)/libhttp.a \
+          $(LIBDIR)/libprotocol.a \
+          $(LIBDIR)/libsock.a \
+          $(LIBDIR)/libomi_error.a \
+          $(LIBDIR)/libxmlserializer.a \
+          $(LIBDIR)/libxml.a \
+          $(LIBDIR)/libbase.a \
+          $(LIBDIR)/libpal.a \
+
 CACHEGRIND_ARGS = $(TARGET)
 
 include $(TOP)/mak/rules.mak

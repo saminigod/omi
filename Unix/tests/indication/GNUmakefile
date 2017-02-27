@@ -17,6 +17,25 @@ DEFINES = DETECT_FORBIDDEN_FUNCTIONS TEST_BUILD
 
 LIBRARIES = test_util indimgr indicmn disp provmgr provreg miapi omi_error wsman http protocol sock xmlserializer wql xml base $(UNITTESTLIBS) micodec mofparser
 
+DEPLIBS = $(LIBDIR)/libtest_util.a \
+          $(LIBDIR)/libindimgr.a \
+          $(LIBDIR)/libindicmn.a \
+          $(LIBDIR)/libdisp.a \
+          $(LIBDIR)/libprovmgr.a \
+          $(LIBDIR)/libprovreg.a \
+          $(LIBDIR)/libmiapi.a \
+          $(LIBDIR)/libomi_error.a \
+          $(LIBDIR)/libwsman.a \
+          $(LIBDIR)/libhttp.a \
+          $(LIBDIR)/libprotocol.a \
+          $(LIBDIR)/libsock.a \
+          $(LIBDIR)/libxmlserializer.a \
+          $(LIBDIR)/libwql.a \
+          $(LIBDIR)/libxml.a \
+          $(LIBDIR)/libbase.a \
+          $(LIBDIR)/libmicodec.a \
+          $(LIBDIR)/libmofparser.a
+
 include $(TOP)/mak/rules.mak
 
 tests:

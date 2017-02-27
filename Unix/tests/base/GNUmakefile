@@ -11,6 +11,18 @@ DEFINES = DETECT_FORBIDDEN_FUNCTIONS TEST_BUILD
 EXPORTS = libtest_base.exp
 
 LIBRARIES = micxx omi_error wsman http xmlserializer xml protocol sock base ut pal nits
+DEPLIBS= $(LIBDIR)/libmicxx.$(SHLIB_EXT) \
+          $(LIBDIR)/libomi_error.a \
+          $(LIBDIR)/libwsman.a \
+          $(LIBDIR)/libhttp.a \
+          $(LIBDIR)/libxmlserializer.a \
+          $(LIBDIR)/libxml.a \
+          $(LIBDIR)/libprotocol.a \
+          $(LIBDIR)/libsock.a \
+          $(LIBDIR)/libbase.a \
+          $(LIBDIR)/libut.a \
+          $(LIBDIR)/libpal.a \
+          $(LIBDIR)/libnits.$(SHLIB_EXT)
 
 include $(TOP)/mak/rules.mak
 

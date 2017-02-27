@@ -11,6 +11,17 @@ DEFINES = DETECT_FORBIDDEN_FUNCTIONS TEST_BUILD
 
 LIBRARIES = omi_error wsman xmlserializer protocol sock wql base pal ut nits
 
+DEPLIBS = $(LIBDIR)/libomi_error.a \
+          $(LIBDIR)/libwsman.a \
+          $(LIBDIR)/libxmlserializer.a \
+          $(LIBDIR)/libprotocol.a \
+          $(LIBDIR)/libsock.a \
+          $(LIBDIR)/libwql.a \
+          $(LIBDIR)/libbase.a \
+          $(LIBDIR)/libpal.a \
+          $(LIBDIR)/libut.a \
+          $(LIBDIR)/libnits.$(SHLIB_EXT)
+
 include $(TOP)/mak/rules.mak
 
 tests:

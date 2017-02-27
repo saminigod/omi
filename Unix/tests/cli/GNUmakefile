@@ -12,6 +12,24 @@ DEFINES = TEST_BUILD
 
 LIBRARIES = omiclient test_util micxx wql miapi  protocol sock base $(UNITTESTLIBS)  omi_error wsman http pal xmlserializer xml base micodec mofparser
 
+DEPLIBS =  $(LIBDIR)/libomiclient.$(SHLIB_EXT) \
+           $(LIBDIR)/libtest_util.a \
+           $(LIBDIR)/libmicxx.$(SHLIB_EXT) \
+           $(LIBDIR)/libwql.a \
+           $(LIBDIR)/libmiapi.a \
+           $(LIBDIR)/libprotocol.a \
+           $(LIBDIR)/libsock.a \
+           $(LIBDIR)/libbase.a \
+           $(LIBDIR)/libomi_error.a \
+           $(LIBDIR)/libwsman.a \
+           $(LIBDIR)/libhttp.a \
+           $(LIBDIR)/libpal.a \
+           $(LIBDIR)/libxmlserializer.a \
+           $(LIBDIR)/libxml.a \
+           $(LIBDIR)/libbase.a \
+           $(LIBDIR)/libmicodec.a \
+           $(LIBDIR)/libmofparser.a
+
 include $(TOP)/mak/rules.mak
 
 tests:

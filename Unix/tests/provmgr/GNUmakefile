@@ -16,6 +16,21 @@ EXPORTS = libtest_provmgr.exp
 INCLUDES = $(TOP) $(TOP)/common
 
 LIBRARIES = provmgr miapi omi_error xmlserializer wsman http protocol sock xmlserializer xml wql base micxx omiclient $(UNITTESTLIBS) pal micodec mofparser
+DEPLIBS = $(LIBDIR)/libmicxx.$(SHLIB_EXT) \
+          $(LIBDIR)/libprovmgr.a \
+          $(LIBDIR)/libmiapi.a \
+          $(LIBDIR)/libomi_error.a \
+          $(LIBDIR)/libxmlserializer.a \
+          $(LIBDIR)/libwsman.a \
+          $(LIBDIR)/libhttp.a \
+          $(LIBDIR)/libprotocol.a \
+          $(LIBDIR)/libsock.a \
+          $(LIBDIR)/libxml.a \
+          $(LIBDIR)/libwql.a \
+          $(LIBDIR)/libbase.a \
+          $(LIBDIR)/libomiclient.$(SHLIB_EXT) \
+          $(LIBDIR)/libpal.a \
+          $(LIBDIR)/libmicodec.a
 
 include $(TOP)/mak/rules.mak
 

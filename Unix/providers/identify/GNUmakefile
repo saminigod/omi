@@ -11,6 +11,19 @@ INCLUDES = $(TOP) $(TOP)/common
 
 LIBRARIES = mi omi_error wsman xmlserializer http protocol sock provmgr wql base pal
 
+
+DEPLIBS = $(LIBDIR)/libmi.$(SHLIB_EXT) \
+          $(LIBDIR)/libomi_error.a \
+          $(LIBDIR)/libwsman.a \
+          $(LIBDIR)/libhttp.a \
+          $(LIBDIR)/libxmlserializer.a \
+          $(LIBDIR)/libprotocol.a \
+          $(LIBDIR)/libsock.a \
+          $(LIBDIR)/libprovmgr.a \
+          $(LIBDIR)/libwql.a \
+          $(LIBDIR)/libbase.a \
+          $(LIBDIR)/libpal.a
+
 include $(TOP)/mak/rules.mak
 
 gen:

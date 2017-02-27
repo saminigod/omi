@@ -13,6 +13,16 @@ DEFINES = TEST_BUILD
 
 LIBRARIES = omi_error wsman xmlserializer xml protocol sock base pal nits
 
+DEPLIBS = $(LIBDIR)/libomi_error.a \
+          $(LIBDIR)/libwsman.a \
+          $(LIBDIR)/libxmlserializer.a \
+          $(LIBDIR)/libprotocol.a \
+          $(LIBDIR)/libsock.a \
+          $(LIBDIR)/libxml.a \
+          $(LIBDIR)/libbase.a \
+          $(LIBDIR)/libpal.a \
+          $(LIBDIR)/libnits.$(SHLIB_EXT)
+
 CACHEGRIND_ARGS = $(TARGET)
 
 include $(TOP)/mak/rules.mak
