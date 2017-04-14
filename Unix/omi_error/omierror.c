@@ -296,10 +296,16 @@ MI_Result OmiErrorFromMiCode(
     if (miResult != MI_RESULT_OK)
         return miResult;
 
-    errorMessage = MiResult_ToString((MI_Result)OMI_Code, buffer, sizeof(buffer)/sizeof(buffer[0]));
-
     if (Message == NULL)
+    {
+        errorMessage = MiResult_ToString((MI_Result)OMI_Code, buffer, sizeof(buffer)/sizeof(buffer[0]));
         Message = errorMessage;
+    }
+    else
+    {
+        // we only need to set errorMessage once Message exist.
+        errorMessage = Message;
+    }
 
     Stprintf(messageId, sizeof(messageId)/sizeof(messageId[0]), PAL_T("OMI:MI_Result:%d"), OMI_Code);
 

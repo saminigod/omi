@@ -4566,7 +4566,7 @@ NitsTest(TestCimErrorFromErrorCode)
 #endif
 
     MI_Instance* pInst3 = NULL;
-    if(NitsCompare(MI_Utilities_CimErrorFromErrorCode(MI_RESULT_INVALID_CLASS, MI_RESULT_TYPE_MI, PAL_T("Testing MI"), &pInst3), MI_RESULT_OK,PAL_T("Got an error")))
+    if(NitsCompare(MI_Utilities_CimErrorFromErrorCode(MI_RESULT_INVALID_CLASS, MI_RESULT_TYPE_MI, PAL_T("The specified class does not exist."), &pInst3), MI_RESULT_OK,PAL_T("Got an error")))
     {
         if(NitsCompare( MI_Instance_GetElement( pInst3, PAL_T("MessageID"), &value, NULL, NULL, NULL) , MI_RESULT_OK, PAL_T("MessageID is not there")) )
         {
@@ -4576,7 +4576,7 @@ NitsTest(TestCimErrorFromErrorCode)
         if(NitsCompare( MI_Instance_GetElement( pInst3, PAL_T("Message"), &value, NULL, NULL, NULL) , MI_RESULT_OK, PAL_T("Expect Message is there")) )
         {
             NitsTrace((MI_String)value.string);
-            NitsCompareString((MI_String)value.string, PAL_T("Testing MI"), PAL_T("Message != Testing MI"));
+            NitsCompareString((MI_String)value.string, PAL_T("The specified class does not exist."), PAL_T("Message != The specified class does not exist."));
         }
         if(NitsAssert( MI_Instance_GetElement( pInst3, PAL_T("OMI_ErrorMessage"), &value, NULL, NULL, NULL) == MI_RESULT_OK, PAL_T("Expect Message is there")) )
         {

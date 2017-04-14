@@ -44,6 +44,7 @@ typedef struct _InteractionOpenParams
     Interaction*    interaction;
     void*           callbackData;   // Optional callbackData (usually the object being called back)
     Message*        msg;            // Optional initial message, if not NULL receiver SHOULD Ack when is ready
+    MI_Char*        errmsg;            // Optional error message, used by Strand_FailOpenWithResult
     Strand*         origin;         // Optional origin strand, used by strand to provide a Strand object that should be released (leave) once the interaction is open
 } InteractionOpenParams;
 

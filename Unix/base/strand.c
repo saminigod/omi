@@ -3219,8 +3219,12 @@ void Strand_FailOpenWithResult(
 {
     PostResultMsg* resultMsg;
 
-    resultMsg = (*callback)( params->msg, NULL, NULL, MI_RESULT_TYPE_MI, result);
-
+    const MI_Char* errmsg = NULL;
+    if(!params->errmsg)
+        errmsg = params->errmsg;
+    
+    resultMsg = (*callback)( params->msg, NULL, errmsg, MI_RESULT_TYPE_MI, result);
+    
     if( NULL != resultMsg )
     {
         Strand_FailOpenWithMsg( params, &resultMsg->base );

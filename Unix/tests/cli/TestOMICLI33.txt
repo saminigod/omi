@@ -11,5 +11,5 @@ instance of OMI_Error
     OMI_Code=1
     OMI_Category=0
     OMI_Type=MI
-    OMI_ErrorMessage=A general error occurred, not covered by a more specific error code.
+    OMI_ErrorMessage=Authentication Failure
 }

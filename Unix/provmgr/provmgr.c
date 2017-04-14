@@ -416,11 +416,13 @@ static MI_Result MI_CALL _GetProviderByClassName(
     _In_ ProvMgr* self,
     _In_ const ProvRegEntry* proventry,
     _In_ MI_ConstString cn,
+    _Inout_ MI_Char** errmsg,
     _In_ Message* request,
     _Out_ Provider** provOut)
 {
     Library* lib;
     Provider* prov;
+    *errmsg = NULL;
 
     trace_GetProviderByClassName(tcs(cn));
 
@@ -431,6 +433,12 @@ static MI_Result MI_CALL _GetProviderByClassName(
         if (!lib)
         {
             trace_OpenProviderLib_Failed(scs(proventry->libraryName));
+            int size = 128;
+			MI_Char buf[size];
+            Stprintf(buf, sizeof(buf)/sizeof(buf[0]), PAL_T("Failed to load provider %s\0"), proventry->libraryName);
+            *errmsg = (MI_Char*)PAL_Malloc(size * sizeof(MI_Char));
+            memcpy(*errmsg, buf, size * sizeof(MI_Char));
+            
             return MI_RESULT_FAILED;
         }
     }
@@ -1010,6 +1018,7 @@ static MI_Result _HandleGetInstanceReq(
         self,
         proventry,
         className,
+        &interactionParams->errmsg,
         &msg->base.base,
         prov);
 
@@ -1191,6 +1200,7 @@ static MI_Result _HandleGetClassReq(
         self,
         proventry,
         msg->className,
+        &interactionParams->errmsg,
         &msg->base.base,
         prov);
 
@@ -1234,6 +1244,7 @@ static MI_Result _HandleCreateInstanceReq(
         self,
         proventry,
         className,
+        &interactionParams->errmsg,
         &msg->base.base,
         prov);
 
@@ -1295,6 +1306,7 @@ static MI_Result _HandleModifyInstanceReq(
         self,
         proventry,
         className,
+        &interactionParams->errmsg,
         &msg->base.base,
         prov);
 
@@ -1359,6 +1371,7 @@ static MI_Result _HandleDeleteInstanceReq(
         self,
         proventry,
         className,
+        &interactionParams->errmsg,
         &msg->base.base,
         prov);
 
@@ -1420,6 +1433,7 @@ static MI_Result _HandleSubscribeReq(
         self,
         proventry,
         msg->className,
+        &interactionParams->errmsg,
         &msg->base.base,
         prov);
 
@@ -1468,6 +1482,7 @@ static MI_Result _HandleInvokeReq(
         self,
         proventry,
         cn,
+        &interactionParams->errmsg,
         &msg->base.base,
         prov);
 
@@ -1579,6 +1594,7 @@ static MI_Result _HandleEnumerateInstancesReq(
                 self,
                 proventry,
                 msg->className,
+                &interactionParams->errmsg,
                 &msg->base.base,
                 prov);
 
@@ -1662,6 +1678,7 @@ static MI_Result MI_CALL _HandleAssociatorsOfReq(
         self,
         proventry,
         msg->className,
+        &interactionParams->errmsg,
         &msg->base.base,
         prov);
 
@@ -1682,6 +1699,7 @@ static MI_Result MI_CALL _HandleAssociatorsOfReq(
             self,
             proventry,
             ((Instance*) msg->instance)->classDecl->name,
+            &interactionParams->errmsg,
             &msg->base.base,
             &provInst );
 
@@ -1748,6 +1766,7 @@ static MI_Result _HandleReferencesOfReq(
         self,
         proventry,
         msg->className,
+        &interactionParams->errmsg,
         &msg->base.base,
         prov );
 
@@ -1768,6 +1787,7 @@ static MI_Result _HandleReferencesOfReq(
             self,
             proventry,
             ((Instance*) msg->instance)->classDecl->name,
+            &interactionParams->errmsg,
             &msg->base.base,
             &provInst );
 
