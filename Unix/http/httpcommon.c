@@ -214,6 +214,12 @@ MI_Result CreateSSLContext(SSL_CTX **sslContext, SSL_Options sslOptions)
         options |= SSL_OP_NO_TLSv1_2;
     }
 #endif
+#ifdef SSL_OP_NO_COMPRESSION
+    if ( sslOptions & DISABLE_SSL_COMPRESSION)
+    {
+        options |= SSL_OP_NO_COMPRESSION;
+    }
+#endif
     if ( options != 0)
     { 
         // If options is zero, the operation is a noop. SSL_CTX_set_options only sets, never clears
